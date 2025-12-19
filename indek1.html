@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Cool Box Monitor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+* {
+  box-sizing: border-box;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #8fd3f4, #84fab0);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* LOGIN */
+.login-card {
+  width: 320px;
+  background: rgba(255,255,255,0.35);
+  backdrop-filter: blur(10px);
+  border-radius: 25px;
+  padding: 35px 25px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+}
+
+.icon {
+  width: 70px;
+  height: 70px;
+  background: #0d4c73;
+  border-radius: 50%;
+  margin: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.icon::before {
+  content: "👤";
+  font-size: 36px;
+  color: white;
+}
+
+input {
+  width: 100%;
+  padding: 12px 15px;
+  margin: 10px 0;
+  border-radius: 30px;
+  border: none;
+  outline: none;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 30px;
+  border: none;
+  background: #0d4c73;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #093852;
+}
+
+/* DASHBOARD */
+#dashboardPage {
+  display: none;
+  width: 100%;
+  padding: 15px;
+}
+
+.card {
+  max-width: 420px;
+  margin: auto;
+  background: white;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 6px 15px rgba(0,0,0,0.12);
+  text-align: center;
+}
+
+.temp-row {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 15px;
+}
+
+.temp-box {
+  width: 45%;
+  background: linear-gradient(135deg, #8fd3f4, #84fab0);
+  border-radius: 18px;
+  padding: 15px;
+}
+
+.temp-value {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.stats {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 15px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN PAGE -->
+<div id="loginPage" class="login-card">
+  <div class="icon"></div>
+  <h2>User Login</h2>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- DASHBOARD PAGE -->
+<div id="dashboardPage">
+  <div class="card">
+    <h2>Cool Box Monitor</h2>
+    <p>Realtime Temperature</p>
+
+    <div class="temp-row">
+      <div class="temp-box">
+        <div class="temp-value"><span id="tempC">--</span>°C</div>
+      </div>
+      <div class="temp-box">
+        <div class="temp-value"><span id="tempF">--</span>°F</div>
+      </div>
+    </div>
+
+    <canvas id="tempChart" height="200"></canvas>
+
+    <div class="stats">
+      <div><b id="maxTemp">--</b><br>Maks</div>
+      <div><b id="minTemp">--</b><br>Min</div>
+      <div><b id="avgTemp">--</b><br>Rata-rata</div>
+    </div>
+
+    <button style="margin-top:15px;background:#e53935" onclick="logout()">Logout</button>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAJeM3MnB2dbbTNFV9htfDLJk1f8ZsIo34",
+  authDomain: "monitoring-coler-box.firebaseapp.com",
+  databaseURL: "https://monitoring-coler-box-default-rtdb.firebaseio.com",
+  projectId: "monitoring-coler-box"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.database();
+
+const loginPage = document.getElementById("loginPage");
+const dashboardPage = document.getElementById("dashboardPage");
+
+/* AUTH STATE */
+auth.onAuthStateChanged(user => {
+  if (user) {
+    loginPage.style.display = "none";
+    dashboardPage.style.display = "block";
+    startRealtime();
+  } else {
+    loginPage.style.display = "block";
+    dashboardPage.style.display = "none";
+  }
+});
+
+/* LOGIN */
+function login() {
+  auth.signInWithEmailAndPassword(
+    email.value,
+    password.value
+  ).catch(err => alert(err.message));
+}
+
+/* LOGOUT */
+function logout() {
+  auth.signOut();
+}
+
+/* CHART */
+const ctx = document.getElementById("tempChart").getContext("2d");
+const chart = new Chart(ctx, {
+  type: "line",
+  data: { labels: [], datasets: [{ data: [], borderColor:"#00acc1", fill:true }] },
+  options: { responsive:true, plugins:{legend:{display:false}} }
+});
+
+let temps = [];
+
+function startRealtime() {
+  db.ref("coolbox").on("value", snap => {
+    const d = snap.val();
+    if (!d) return;
+
+    tempC.innerText = d.temperature_c.toFixed(1);
+    tempF.innerText = d.temperature_f.toFixed(1);
+
+    chart.data.labels.push(new Date().toLocaleTimeString());
+    chart.data.datasets[0].data.push(d.temperature_c);
+    if (chart.data.labels.length > 12) {
+      chart.data.labels.shift();
+      chart.data.datasets[0].data.shift();
+    }
+    chart.update();
+
+    temps.push(d.temperature_c);
+    if (temps.length > 50) temps.shift();
+
+    maxTemp.innerText = Math.max(...temps).toFixed(1);
+    minTemp.innerText = Math.min(...temps).toFixed(1);
+    avgTemp.innerText = (temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(1);
+  });
+}
+</script>
+
+</body>
+</html>
